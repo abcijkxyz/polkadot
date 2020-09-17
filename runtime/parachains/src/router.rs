@@ -26,10 +26,10 @@ use crate::{
 };
 use sp_std::prelude::*;
 use frame_support::{decl_error, decl_module, decl_storage, weights::Weight};
-use primitives::v1::{Id as ParaId, InboundDownwardMessage, Hash};
+use sp_std::collections::vec_deque::VecDeque;
+use primitives::v1::{Id as ParaId, InboundDownwardMessage, Hash, UpwardMessage};
 
 mod dmp;
-
 mod ump;
 
 pub trait Trait: frame_system::Trait + configuration::Trait {}
@@ -56,6 +56,24 @@ decl_storage! {
 		/// - `B`: is the relay-chain block number in which a message was appended.
 		/// - `H(M)`: is the hash of the message being appended.
 		DownwardMessageQueueHeads: map hasher(twox_64_concat) ParaId => Hash;
+
+		/*
+		 * Upward Message Passing (UMP)
+		 *
+		 * Storage layout required for UMP, specifically dispatchable upward messages.
+		 */
+
+		/// Dispatchable objects ready to be dispatched onto the relay chain. The messages are processed in FIFO order.
+		RelayDispatchQueues: map hasher(twox_64_concat) ParaId => VecDeque<UpwardMessage>;
+		/// Size of the dispatch queues. Caches sizes of the queues in `RelayDispatchQueue`.
+		/// First item in the tuple is the count of messages and second
+		/// is the total length (in bytes) of the message payloads.
+		RelayDispatchQueueSize: map hasher(twox_64_concat) ParaId => (u32, u32);
+		/// The ordered list of `ParaId`s that have a `RelayDispatchQueue` entry.
+		NeedsDispatch: Vec<ParaId>;
+		/// This is the para that gets will get dispatched first during the next upward dispatchable queue
+		/// execution round.
+		NextDispatchRoundStartWith: Option<ParaId>;
 	}
 }
 
@@ -85,8 +103,12 @@ impl<T: Trait> Module<T> {
 	) {
 		let outgoing = OutgoingParas::take();
 		for outgoing_para in outgoing {
+			// DMP
 			<Self as Store>::DownwardMessageQueues::remove(&outgoing_para);
 			<Self as Store>::DownwardMessageQueueHeads::remove(&outgoing_para);
+
+			// UMP
+			Self::outgoing_para_cleanup_ump(outgoing_para);
 		}
 	}
 
