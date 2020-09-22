@@ -57,7 +57,7 @@ native_executor_instance!(
 	pub PolkadotExecutor,
 	polkadot_runtime::api::dispatch,
 	polkadot_runtime::native_version,
-	(frame_benchmarking::benchmarking::HostFunctions, sp_io::useless_crypto::HostFunctions),
+	frame_benchmarking::benchmarking::HostFunctions,
 );
 
 native_executor_instance!(
@@ -153,7 +153,7 @@ pub fn new_partial<RuntimeApi, Executor>(config: &mut Configuration, test: bool)
 	let inherent_data_providers = inherents::InherentDataProviders::new();
 
 	let (client, backend, keystore, task_manager) =
-		service::new_full_parts::<Block, RuntimeApi, Executor>(&config)?;
+		service::new_full_parts::<Block, RuntimeApi, Executor>(&config, None)?;
 	let client = Arc::new(client);
 
 	let select_chain = sc_consensus::LongestChain::new(backend.clone());
